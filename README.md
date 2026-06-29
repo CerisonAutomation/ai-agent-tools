@@ -1,46 +1,40 @@
 # AI Agent Tools
 
-**Production AI agent infrastructure** — MCP-driven tools, LangGraph workflows, CrewAI agents, FastAPI backends, and secure automation with typed schemas, guardrails, and controlled execution.
+**AI agent infrastructure** — MCP-driven tools, LangGraph workflows, CrewAI agents, FastAPI backends, and secure production automation with guardrails, typed schemas, and controlled execution.
 
-[![Python](https://img.shields.io/badge/Python-3.10+-blue?style=flat&logo=python)]()
-[![FastAPI](https://img.shields.io/badge/FastAPI-backend-009688?style=flat&logo=fastapi)]()
-[![LangGraph](https://img.shields.io/badge/LangGraph-workflows-purple?style=flat)]()
+[![Python](https://img.shields.io/badge/Python-3.11+-blue?style=flat&logo=python)]()
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688?style=flat&logo=fastapi)]()
+[![LangChain](https://img.shields.io/badge/LangChain-0.2-green?style=flat)]()
+[![Tests](https://img.shields.io/badge/Tests-pytest-brightgreen?style=flat)]()
+[![CI](https://img.shields.io/badge/CI-GitHub%20Actions-2088FF?style=flat&logo=githubactions)]()
 [![License](https://img.shields.io/badge/License-MIT-lightgrey?style=flat)]()
 
 ---
 
-## What's in here
-
-| Module | What it does |
-|---|---|
-| `mcp-tools/` | MCP server tools for browser inspection, API calls, file processing |
-| `agents/` | LangGraph and CrewAI agent implementations with guardrails |
-| `api/` | FastAPI backends for agent orchestration and tool serving |
-| `workflows/` | Production workflow definitions with polling, webhooks, and cron |
-| `schemas/` | Zod and Pydantic typed schemas for all agent inputs and outputs |
-| `utils/` | Retry logic, rate limiting, state management, observability |
-
----
-
-## Architecture
+## Structure
 
 ```
-Agent layer      LangGraph · CrewAI · LiteLLM multi-model routing
-Tool layer       MCP tools · Playwright MCP · Browser inspection · File processing
-API layer        FastAPI · REST endpoints · Streaming responses
-Security         OAuth 2.0 · JWT · HMAC-SHA256 · Input validation
-Reliability      Typed schemas · Guardrails · Retry logic · Idempotency
-Orchestration    Webhooks · Polling · Cron jobs · Event-driven execution
+ai-agent-tools/
+├── api/
+│   ├── main.py                     # FastAPI app — workflow registry + /run endpoint
+│   └── workflows/
+│       ├── guesty_sync.py          # Fetch + sync Guesty reservations
+│       └── summarise_text.py       # LLM text summarisation (OpenRouter/OpenAI)
+├── schemas/
+│   └── agent-schemas.ts            # TypeScript Zod schemas for agent I/O
+├── utils/
+│   ├── idempotency.py              # Idempotency key store
+│   ├── retry.py                    # Async exponential backoff retry decorator
+│   └── rate_limiter.py             # Token-bucket rate limiter
+├── tests/
+│   ├── test_workflows.py           # Registry, dispatch, 404 handling
+│   ├── test_rate_limiter.py        # Token bucket behaviour
+│   └── test_retry.py               # Retry decorator — success, partial fail, exhaustion
+├── .github/workflows/ci.yml        # GitHub Actions CI — runs on every push
+├── requirements.txt
+├── Makefile
+└── .env.example
 ```
-
----
-
-## Key design principles
-
-- **Typed inputs and outputs** — every agent tool uses Pydantic/Zod schemas
-- **Controlled execution** — guardrails prevent runaway or brittle behavior
-- **Retrieval checks** — agents verify context before acting
-- **Predictable, not brittle** — systems behave consistently under load
 
 ---
 
@@ -48,58 +42,48 @@ Orchestration    Webhooks · Polling · Cron jobs · Event-driven execution
 
 ```bash
 pip install -r requirements.txt
-uvicorn api.main:app --reload
+cp .env.example .env
+make dev
+# API at http://localhost:8002
 ```
 
 ---
 
-## Example: MCP browser tool
+## Run tests
 
-```python
-from mcp import Tool, ToolResult
-from playwright.async_api import async_playwright
-
-class BrowserInspectTool(Tool):
-    name = "browser_inspect"
-    description = "Inspect a page and return structured content"
-
-    async def run(self, url: str) -> ToolResult:
-        async with async_playwright() as pw:
-            browser = await pw.chromium.launch()
-            page = await browser.new_page()
-            await page.goto(url, wait_until="networkidle")
-            content = await page.content()
-            title = await page.title()
-            await browser.close()
-            return ToolResult(data={"title": title, "content": content[:5000]})
+```bash
+make test
+# or
+pytest tests/ -v
 ```
 
 ---
 
-## Example: LangGraph workflow
+## Registered workflows
 
-```python
-from langgraph.graph import StateGraph
-from typing import TypedDict
+| Workflow ID | What it does |
+|---|---|
+| `guesty.sync_reservations` | Fetch reservations from Guesty API for a date window |
+| `agent.summarise_text` | Summarise arbitrary text via LLM (OpenRouter / OpenAI) |
 
-class WorkflowState(TypedDict):
-    input: str
-    tool_result: str
-    final_output: str
+Add new workflows by dropping a function in `api/workflows/` and registering in `WORKFLOW_REGISTRY`.
 
-def build_workflow():
-    graph = StateGraph(WorkflowState)
-    graph.add_node("inspect", inspect_node)
-    graph.add_node("process", process_node)
-    graph.add_node("output", output_node)
-    graph.add_edge("inspect", "process")
-    graph.add_edge("process", "output")
-    graph.set_entry_point("inspect")
-    return graph.compile()
+---
+
+## API
+
+```bash
+# List registered workflows
+curl http://localhost:8002/workflows
+
+# Run a workflow
+curl -X POST http://localhost:8002/workflows/run \
+  -H 'content-type: application/json' \
+  -d '{"workflow_id": "agent.summarise_text", "input_data": {"text": "FastAPI is a modern Python web framework.", "max_words": 20}}'
 ```
 
 ---
 
 ## Built by
 
-> [Cerison Brown](https://github.com/CerisonAutomation) — Automation Engineer specialising in AI workflow engineering, MCP agent tooling, and secure production automation systems.
+> [Cerison Brown](https://github.com/CerisonAutomation) — Automation Engineer specialising in AI agent infrastructure, multi-model orchestration, and production Python workflow systems.
